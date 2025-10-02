@@ -6,7 +6,6 @@ import textwrap
 import unicodedata
 from loguru import logger
 import google.genai as genai
-from dotenv import load_dotenv
 
 import requests
 import streamlit as st
@@ -26,15 +25,12 @@ from modules.prompts import (
 # ----------------------------
 # 환경 설정
 # ----------------------------
-load_dotenv()
-logger.add(sys.stdout, level="INFO")
+VLLM_API_KEY = st.secrets["VLLM_API_KEY"]
+GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
-VLLM_API_KEY = os.getenv("VLLM_API_KEY", None)
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-KOREAN_ENDPOINT = os.getenv("KOREAN_ENDPOINT", None)
-CHINESE_ENDPOINT = os.getenv("CHINESE_ENDPOINT", None)
-ENGLISH_ENDPOINT = os.getenv("ENGLISH_ENDPOINT", None)
+KOREAN_ENDPOINT = st.secrets.get("KOREAN_ENDPOINT")
+CHINESE_ENDPOINT = st.secrets.get("CHINESE_ENDPOINT")
+ENGLISH_ENDPOINT = st.secrets.get("ENGLISH_ENDPOINT")
 
 USE_SENTENCE_LEVEL_TRANSLATION = (
     True  # True면 모든 번역/검증을 문장 단위로 처리, False면 줄 단위로 처리
