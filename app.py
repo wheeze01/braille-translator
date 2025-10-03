@@ -27,12 +27,12 @@ from modules.prompts import (
 # ----------------------------
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
-KOREAN_ENDPOINT = st.secrets("KOREAN_ENDPOINT")
-CHINESE_ENDPOINT = st.secrets("CHINESE_ENDPOINT")
+KOREAN_ENDPOINT = st.secrets["KOREAN_ENDPOINT"]
+CHINESE_ENDPOINT = st.secrets["CHINESE_ENDPOINT"]
 ENGLISH_ENDPOINT = st.secrets.get("ENGLISH_ENDPOINT")
 
-KOREAN_API_KEY = st.secrets("KOREAN_API_KEY")
-CHINESE_API_KEY = st.secrets("CHINESE_API_KEY")
+KOREAN_API_KEY = st.secrets["KOREAN_API_KEY"]
+CHINESE_API_KEY = st.secrets["CHINESE_API_KEY"]
 ENGLISH_API_KEY = st.secrets.get("ENGLISH_API_KEY")
 
 USE_SENTENCE_LEVEL_TRANSLATION = (
@@ -91,7 +91,7 @@ def pick_api_key(language: str) -> str | None:
 
 def llm_chat(system_msg: str, user_msg: str, language: str = "Korean") -> str:
     headers = {"Content-Type": "application/json"}
-    api_key = pick_api_key(language)
+    api_key = pick_api_key(language).strip()
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
@@ -117,7 +117,9 @@ def llm_chat(system_msg: str, user_msg: str, language: str = "Korean") -> str:
             "stop": stop_tokens,
             "chat_template_kwargs": {"enable_thinking": False},
         }
-        print(payload)
+        logger.info(
+            "=== DEBUG PAYLOAD ===", json.dumps(payload, ensure_ascii=False, indent=2)
+        )
 
     else:
         stop_tokens = ["<|eot_id|>"]  # Kanana
@@ -139,9 +141,18 @@ def llm_chat(system_msg: str, user_msg: str, language: str = "Korean") -> str:
         }
 
     endpoint = pick_endpoint(language)
+    logger.info("=== DEBUG ENDPOINT ===", endpoint)
+    logger.info("=== DEBUG HEADERS ===", headers)
+    logger.info(
+        "=== DEBUG PAYLOAD ===", json.dumps(payload, ensure_ascii=False, indent=2)
+    )
     try:
         resp = requests.post(
-            endpoint, headers=headers, data=json.dumps(payload), timeout=120
+            # endpoint, headers=headers, data=json.dumps(payload), timeout=120
+            endpoint,
+            headers=headers,
+            json=payload,
+            timeout=120,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -162,20 +173,20 @@ def gemini_summarize(text: str, source_language: str) -> str:
         thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
         system_instruction=SUMMARIZATION_SYSTEM_PROMPT,
     )
-    print("==== [Summarization] ====")
-    print(f"[Input Text]\n{text}")
-    print(f"[Source Language] {source_language}")
+    logger.info("==== [Summarization] ====")
+    logger.info(f"[Input Text]\n{text}")
+    logger.info(f"[Source Language] {source_language}")
     resp = client.models.generate_content(
         model="gemini-2.5-flash",
         config=cfg,
         contents=f"source_language: {source_language}\n\ninput_text: {text}",
     )
     raw = resp.text
-    print(f"[Output Raw]\n{raw}")
+    logger.info(f"[Output Raw]\n{raw}")
     parsed = json.loads(raw)
     summary = parsed.get("output_text", text)
-    print(f"[Output Parsed]\n{summary}")
-    print("=========================")
+    logger.info(f"[Output Parsed]\n{summary}")
+    logger.info("=========================")
     return summary
 
 
@@ -256,8 +267,8 @@ def _safe_str(x, fallback=""):
 # Translation
 # ----------------------------
 def run_translation(text: str) -> str:
-    print("==== [Translation] ====")
-    print(f"[Input Text]\n{text}")
+    logger.info("==== [Translation] ====")
+    logger.info(f"[Input Text]\n{text}")
     try:
         if st.session_state.mode == "text_to_braille":
             if st.session_state.src_lang == "Korean":
@@ -294,15 +305,15 @@ def run_translation(text: str) -> str:
             tgt_sents = []
             for i, s in enumerate(src_sents, 1):
                 out = llm_chat(system_msg, s, lang)
-                print(f"[Sentence {i} IN]\n{s}")
-                print(f"[Sentence {i} OUT]\n{out}")
+                logger.info(f"[Sentence {i} IN]\n{s}")
+                logger.info(f"[Sentence {i} OUT]\n{out}")
                 tgt_sents.append(_safe_str(out, "[Empty Translation]"))
             st.session_state["tgt_sents"] = tgt_sents
 
             # 3) UI용: 줄 구조로 복원
             ui_text = assemble_by_lines(tgt_sents, line_counts)
-            print(f"[Final Output]\n{ui_text}")
-            print("=======================")
+            logger.info(f"[Final Output]\n{ui_text}")
+            logger.info("=======================")
             return ui_text
 
         # --- 줄 단위 모드 (기존) ---
@@ -310,14 +321,14 @@ def run_translation(text: str) -> str:
         for line in text.split("\n"):
             if line.strip():
                 out = llm_chat(system_msg, line, lang)
-                print(f"[Line Input]\n{line}")
+                logger.info(f"[Line Input]\n{line}")
                 translated_lines.append(_safe_str(out, "[Empty Translation]"))
             else:
                 translated_lines.append("")
 
         result = "\n".join(translated_lines)
-        print(f"[Final Output]\n{result}")
-        print("=======================")
+        logger.info(f"[Final Output]\n{result}")
+        logger.info("=======================")
         return result
 
     except Exception as e:
@@ -371,16 +382,16 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
                     recon_sents.append("")
                     continue
                 out = llm_chat(system_msg, tgt_sent, lang)
-                print(f"[FB {i} IN]\n{tgt_sent}")
-                print(f"[FB {i} OUT]\n{out}")
+                logger.info(f"[FB {i} IN]\n{tgt_sent}")
+                logger.info(f"[FB {i} OUT]\n{out}")
                 recon_sents.append(_safe_str(out, ""))
 
             recon_joined = " ".join([s for s in recon_sents if s])
 
-            print("==== [Validation: Forward-Backward] ====")
-            print(f"[Input Src]\n{src}")
-            print(f"[Reconstructed Joined]\n{recon_joined}")
-            print("========================================")
+            logger.info("==== [Validation: Forward-Backward] ====")
+            logger.info(f"[Input Src]\n{src}")
+            logger.info(f"[Reconstructed Joined]\n{recon_joined}")
+            logger.info("========================================")
 
             if unicodedata.normalize("NFC", recon_joined) == unicodedata.normalize(
                 "NFC", src
@@ -396,14 +407,14 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
                 system_instruction=VALIDATION_SYSTEM_PROMPT,
             )
             contents = f"src: {src}\n\nrecon: {recon_joined}"
-            print("==== [Semantic Equivalence] ====")
-            print(f"[Input Src]\n{contents}")
+            logger.info("==== [Semantic Equivalence] ====")
+            logger.info(f"[Input Src]\n{contents}")
             resp = client.models.generate_content(
                 model="gemini-2.5-flash", config=cfg, contents=contents
             )
             parsed = json.loads(resp.text)
-            print(f"[Output Raw]\n{resp.text}")
-            print("===============================")
+            logger.info(f"[Output Raw]\n{resp.text}")
+            logger.info("===============================")
 
             if parsed.get("equal") is True:
                 return "Automatic Validation using Forward-Backward Failed. Semantic Equivalence Validation using LLM Success."
@@ -427,11 +438,11 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
                     recon_lines.append("")
             recon = "\n".join(recon_lines)
 
-            print("==== [Validation: Forward-Backward] ====")
-            print(f"[Input Src]\n{src}")
-            print(f"[Input Tgt]\n{tgt_ui_text}")
-            print(f"[Reconstructed Output]\n{recon}")
-            print("========================================")
+            logger.info("==== [Validation: Forward-Backward] ====")
+            logger.info(f"[Input Src]\n{src}")
+            logger.info(f"[Input Tgt]\n{tgt_ui_text}")
+            logger.info(f"[Reconstructed Output]\n{recon}")
+            logger.info("========================================")
 
             if recon == src:
                 return "Automatic Validation using Forward-Backward Success."
