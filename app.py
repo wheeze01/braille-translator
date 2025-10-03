@@ -58,11 +58,11 @@ model_configs = {
 # ----------------------------
 def pick_model(language: str) -> str | None:
     if language == "Korean":
-        return KOREAN_API_KEY
+        return "kanana-1.5-2.1b"
     elif language == "Chinese":
-        return CHINESE_API_KEY
+        return "qwen3-1.7b"
     elif language == "English":
-        return ENGLISH_API_KEY
+        return "kanana-1.5-2.1b"
     else:
         return None
 
