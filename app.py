@@ -27,12 +27,12 @@ from modules.prompts import (
 # ----------------------------
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
-KOREAN_ENDPOINT = st.secrets.get("KOREAN_ENDPOINT")
-CHINESE_ENDPOINT = st.secrets.get("CHINESE_ENDPOINT")
+KOREAN_ENDPOINT = st.secrets("KOREAN_ENDPOINT")
+CHINESE_ENDPOINT = st.secrets("CHINESE_ENDPOINT")
 ENGLISH_ENDPOINT = st.secrets.get("ENGLISH_ENDPOINT")
 
-KOREAN_API_KEY = st.secrets.get("KOREAN_API_KEY")
-CHINESE_API_KEY = st.secrets.get("CHINESE_API_KEY")
+KOREAN_API_KEY = st.secrets("KOREAN_API_KEY")
+CHINESE_API_KEY = st.secrets("CHINESE_API_KEY")
 ENGLISH_API_KEY = st.secrets.get("ENGLISH_API_KEY")
 
 USE_SENTENCE_LEVEL_TRANSLATION = (
