@@ -138,8 +138,6 @@ def llm_chat(system_msg: str, user_msg: str, language: str = "Korean") -> str:
         }
 
     endpoint = pick_endpoint(language)
-    logger.info(f"=== DEBUG ENDPOINT === : {endpoint}")
-    logger.info(f"=== DEBUG HEADERS === : {headers}")
     logger.info(
         f"=== DEBUG PAYLOAD === : {json.dumps(payload, ensure_ascii=False, indent=2)}"
     )
