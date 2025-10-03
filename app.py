@@ -62,7 +62,7 @@ def pick_model(language: str) -> str | None:
     elif language == "Chinese":
         return "qwen3-1.7b"
     elif language == "English":
-        return "kanana-1.5-2.1b"
+        return "kanana-1.5-2.1b-english"
     else:
         return None
 
