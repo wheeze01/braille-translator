@@ -25,12 +25,15 @@ from modules.prompts import (
 # ----------------------------
 # 환경 설정
 # ----------------------------
-VLLM_API_KEY = st.secrets["VLLM_API_KEY"]
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
 KOREAN_ENDPOINT = st.secrets.get("KOREAN_ENDPOINT")
 CHINESE_ENDPOINT = st.secrets.get("CHINESE_ENDPOINT")
 ENGLISH_ENDPOINT = st.secrets.get("ENGLISH_ENDPOINT")
+
+KOREAN_API_KEY = st.secrets.get("KOREAN_API_KEY")
+CHINESE_API_KEY = st.secrets.get("CHINESE_API_KEY")
+ENGLISH_API_KEY = st.secrets.get("ENGLISH_API_KEY")
 
 USE_SENTENCE_LEVEL_TRANSLATION = (
     True  # True면 모든 번역/검증을 문장 단위로 처리, False면 줄 단위로 처리
@@ -55,11 +58,11 @@ model_configs = {
 # ----------------------------
 def pick_model(language: str) -> str | None:
     if language == "Korean":
-        return "kanana-1.5-2.1b"
+        return KOREAN_API_KEY
     elif language == "Chinese":
-        return "qwen3-1.7b"
+        return CHINESE_API_KEY
     elif language == "English":
-        return "kanana-1.5-2.1b"
+        return ENGLISH_API_KEY
     else:
         return None
 
@@ -75,10 +78,22 @@ def pick_endpoint(language: str) -> str:
     return KOREAN_ENDPOINT
 
 
+def pick_api_key(language: str) -> str | None:
+    lang = (language or "").strip().lower()
+    if lang == "korean":
+        return KOREAN_API_KEY
+    elif lang == "chinese":
+        return CHINESE_API_KEY
+    elif lang == "english":
+        return ENGLISH_API_KEY
+    return None
+
+
 def llm_chat(system_msg: str, user_msg: str, language: str = "Korean") -> str:
     headers = {"Content-Type": "application/json"}
-    if VLLM_API_KEY:
-        headers["Authorization"] = f"Bearer {VLLM_API_KEY}"
+    api_key = pick_api_key(language)
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
 
     model_name = pick_model(language)
 
