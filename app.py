@@ -117,9 +117,6 @@ def llm_chat(system_msg: str, user_msg: str, language: str = "Korean") -> str:
             "stop": stop_tokens,
             "chat_template_kwargs": {"enable_thinking": False},
         }
-        logger.info(
-            "=== DEBUG PAYLOAD ===", json.dumps(payload, ensure_ascii=False, indent=2)
-        )
 
     else:
         stop_tokens = ["<|eot_id|>"]  # Kanana
@@ -141,10 +138,10 @@ def llm_chat(system_msg: str, user_msg: str, language: str = "Korean") -> str:
         }
 
     endpoint = pick_endpoint(language)
-    logger.info("=== DEBUG ENDPOINT ===", endpoint)
-    logger.info("=== DEBUG HEADERS ===", headers)
+    logger.info(f"=== DEBUG ENDPOINT === : {endpoint}")
+    logger.info(f"=== DEBUG HEADERS === : {headers}")
     logger.info(
-        "=== DEBUG PAYLOAD ===", json.dumps(payload, ensure_ascii=False, indent=2)
+        f"=== DEBUG PAYLOAD === : {json.dumps(payload, ensure_ascii=False, indent=2)}"
     )
     try:
         resp = requests.post(
@@ -495,7 +492,7 @@ with st.expander("Abstract", expanded=True):
     st.write(
         textwrap.dedent(
             """
-251003 Since its invention, Braille—a tactile writing system based on raised-dot patterns—has been an essential tool enabling visually impaired individuals to access literal information and engage with the world. In modern applications, Braille can be digitally encoded using rule-based mapping from printed characters to Braille cells, as specified in language-specific contraction dictionaries. While such rule-based translation often achieves satisfactory accuracy, challenges remain, particularly in handling ambiguities arising from Grade-2 contractions that require context-sensitive rules, syllable decomposition for particular languages, and multilingual text translation. Moreover, current systems typically apply the same translation rules mechanically, regardless of the input text's genre or characteristics. This approach can be suboptimal, as meaning is often more effective conveyed through concise, simplified expressions that reduce the reading burden for visually impaired users. A more critical limitation lies in the post-translation stage: outputs must still be inspected by qualified experts—who are in short supply—, leading to high publication costs and significant delays. To address these issues, we leverage recent advances in large language model (LLM). Specifically, we propose an LLM-based text-to-Braille translation scheme capable of 1) achieving enhanced translation accuracy; 2) generating context-aware expressions that convey meaning in a more accessible and contextually appropriate manner; and 3) automatically verifying translation outputs through forward-backward translation. The proposed scheme is evaluated across diverse documents written in both Korean and Chinese. Compared with conventional rule-based approaches, our system improves translation accuracy (chrF Score) by up to 99.9\%. We further demonstrate that our automated verification mechanism can substantially reduce both time and budget in the publication of Braille books. Additionally, the system adaptively adjusts the level of summarization based on the input, condensing content and simplifying phrasing while preserving semantic fidelity. This not only reduces reduces reading efforts for end users but also lowers publication costs by minimizing the physical size of Braille volumes.
+Since its invention, Braille—a tactile writing system based on raised-dot patterns—has been an essential tool enabling visually impaired individuals to access literal information and engage with the world. In modern applications, Braille can be digitally encoded using rule-based mapping from printed characters to Braille cells, as specified in language-specific contraction dictionaries. While such rule-based translation often achieves satisfactory accuracy, challenges remain, particularly in handling ambiguities arising from Grade-2 contractions that require context-sensitive rules, syllable decomposition for particular languages, and multilingual text translation. Moreover, current systems typically apply the same translation rules mechanically, regardless of the input text's genre or characteristics. This approach can be suboptimal, as meaning is often more effective conveyed through concise, simplified expressions that reduce the reading burden for visually impaired users. A more critical limitation lies in the post-translation stage: outputs must still be inspected by qualified experts—who are in short supply—, leading to high publication costs and significant delays. To address these issues, we leverage recent advances in large language model (LLM). Specifically, we propose an LLM-based text-to-Braille translation scheme capable of 1) achieving enhanced translation accuracy; 2) generating context-aware expressions that convey meaning in a more accessible and contextually appropriate manner; and 3) automatically verifying translation outputs through forward-backward translation. The proposed scheme is evaluated across diverse documents written in both Korean and Chinese. Compared with conventional rule-based approaches, our system improves translation accuracy (chrF Score) by up to 99.9\%. We further demonstrate that our automated verification mechanism can substantially reduce both time and budget in the publication of Braille books. Additionally, the system adaptively adjusts the level of summarization based on the input, condensing content and simplifying phrasing while preserving semantic fidelity. This not only reduces reduces reading efforts for end users but also lowers publication costs by minimizing the physical size of Braille volumes.
             """
         )
     )
