@@ -29,11 +29,11 @@ GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
 KOREAN_ENDPOINT = st.secrets["KOREAN_ENDPOINT"]
 CHINESE_ENDPOINT = st.secrets["CHINESE_ENDPOINT"]
-ENGLISH_ENDPOINT = st.secrets.get("ENGLISH_ENDPOINT")
+ENGLISH_ENDPOINT = st.secrets["ENGLISH_ENDPOINT"]
 
 KOREAN_API_KEY = st.secrets["KOREAN_API_KEY"]
 CHINESE_API_KEY = st.secrets["CHINESE_API_KEY"]
-ENGLISH_API_KEY = st.secrets.get("ENGLISH_API_KEY")
+ENGLISH_API_KEY = st.secrets["ENGLISH_API_KEY"]
 
 USE_SENTENCE_LEVEL_TRANSLATION = (
     True  # True면 모든 번역/검증을 문장 단위로 처리, False면 줄 단위로 처리
@@ -41,14 +41,25 @@ USE_SENTENCE_LEVEL_TRANSLATION = (
 
 model_configs = {
     "qwen3-1.7b": {
-        "dtype": "bfloat16",
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0.0,
         "end_token": "<|im_end|>",
-        "assistant_token": "<|im_start|>assistant\n<think>\n\n</think>\n\n",
     },
     "kanana-1.5-2.1b": {
-        "dtype": "bfloat16",
+        "temperature": 0.0,
+        "top_p": 1.0,
+        "top_k": -1,
+        "min_p": 0.0,
         "end_token": "<|eot_id|>",
-        "assistant_token": "<|start_header_id|>assistant<|end_header_id|>\n\n",
+    },
+    "kanana-1.5-2.1b-english": {
+        "temperature": 0.0,
+        "top_p": 1.0,
+        "top_k": -1,
+        "min_p": 0.0,
+        "end_token": "<|eot_id|>",
     },
 }
 
@@ -97,45 +108,29 @@ def llm_chat(system_msg: str, user_msg: str, language: str = "Korean") -> str:
 
     model_name = pick_model(language)
 
-    # 언어별 end_token 설정
-    if language.lower() == "chinese":
-        stop_tokens = ["<|im_end|>"]  # Qwen3
-        top_p = 0.8
-        top_k = 20
-        min_p = 0.0
-        temperature = 0.0
-        payload = {
-            "model": model_name,
-            "messages": [
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": user_msg},
-            ],
-            "temperature": temperature,
-            "top_p": top_p,
-            "top_k": top_k,
-            "min_p": min_p,
-            "stop": stop_tokens,
-            "chat_template_kwargs": {"enable_thinking": False},
-        }
+    # payload 설정
+    temperature = model_configs[model_name]["temperature"]
+    top_p = model_configs[model_name]["top_p"]
+    top_k = model_configs[model_name]["top_k"]
+    min_p = model_configs[model_name]["min_p"]
+    stop_tokens = [model_configs[model_name]["end_token"]]
 
-    else:
-        stop_tokens = ["<|eot_id|>"]  # Kanana
-        top_p = 1.0
-        top_k = -1
-        min_p = 0.0
-        temperature = 0.0
-        payload = {
-            "model": model_name,
-            "messages": [
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": user_msg},
-            ],
-            "temperature": temperature,
-            "top_p": top_p,
-            "top_k": top_k,
-            "min_p": min_p,
-            "stop": stop_tokens,
-        }
+    payload = {
+        "model": model_name,
+        "messages": [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_msg},
+        ],
+        "temperature": temperature,
+        "top_p": top_p,
+        "top_k": top_k,
+        "min_p": min_p,
+        "stop": stop_tokens,
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+
+    if language.lower() == "chinese":
+        payload["chat_template_kwargs"] = {"enable_thinking": False}
 
     endpoint = pick_endpoint(language)
     logger.info(
@@ -490,7 +485,7 @@ with st.expander("Abstract", expanded=True):
     st.write(
         textwrap.dedent(
             """
-Since its invention, Braille—a tactile writing system based on raised-dot patterns—has been an essential tool enabling visually impaired individuals to access literal information and engage with the world. In modern applications, Braille can be digitally encoded using rule-based mapping from printed characters to Braille cells, as specified in language-specific contraction dictionaries. While such rule-based translation often achieves satisfactory accuracy, challenges remain, particularly in handling ambiguities arising from Grade-2 contractions that require context-sensitive rules, syllable decomposition for particular languages, and multilingual text translation. Moreover, current systems typically apply the same translation rules mechanically, regardless of the input text's genre or characteristics. This approach can be suboptimal, as meaning is often more effective conveyed through concise, simplified expressions that reduce the reading burden for visually impaired users. A more critical limitation lies in the post-translation stage: outputs must still be inspected by qualified experts—who are in short supply—, leading to high publication costs and significant delays. To address these issues, we leverage recent advances in large language model (LLM). Specifically, we propose an LLM-based text-to-Braille translation scheme capable of 1) achieving enhanced translation accuracy; 2) generating context-aware expressions that convey meaning in a more accessible and contextually appropriate manner; and 3) automatically verifying translation outputs through forward-backward translation. The proposed scheme is evaluated across diverse documents written in both Korean and Chinese. Compared with conventional rule-based approaches, our system improves translation accuracy (chrF Score) by up to 99.9\%. We further demonstrate that our automated verification mechanism can substantially reduce both time and budget in the publication of Braille books. Additionally, the system adaptively adjusts the level of summarization based on the input, condensing content and simplifying phrasing while preserving semantic fidelity. This not only reduces reduces reading efforts for end users but also lowers publication costs by minimizing the physical size of Braille volumes.
+Since its invention, Braille—a tactile writing system based on raised-dot patterns—has been an essential tool enabling visually impaired individuals to access textual information and engage with the world. In modern applications, Braille can be digitally encoded using rule-based mapping from printed characters to Braille cells, as specified in language-specific contraction dictionaries. While these rule-based methods achieve satisfactory accuracy for simple text, they face significant challenges, particularly with ambiguities in Grade-2 contractions, complex syllabic structures in certain languages, and the translation of multilingual text. Moreover, current systems typically apply the same translation rules mechanically, regardless of the input text's genre or characteristics. This approach can be suboptimal, as meaning can be conveyed more effectively through concise expressions that reduce the reading burden for users. A more critical limitation lies in the post-translation stage: human verification by qualified experts—who are in short supply—is still required to ensure accuracy, leading to high publication costs and significant delays. To address these issues, we leverage recent advances in large language models. Specifically, we propose an LLM-based Text-to-Braille translation framework capable of 1) achieving enhanced translation accuracy; 2) generating context-aware expressions that convey meaning in a more accessible and contextually appropriate manner; and 3) automatically verifying translation outputs through LLM-based semantic-level forward-backward translation. The proposed framework was evaluated on a diverse corpus of Korean and Chinese documents. Compared to conventional rule-based approaches, our system achieves translation accuracy (chrF Score) of up to 99.936%. Furthermore, our automated verification mechanism substantially reduces the time and cost associated with publishing Braille materials. Additionally, the system adaptively adjusts the level of summarization based on the input, condensing content and simplifying phrasing while preserving semantic fidelity. This not only reduces reading time and effort for end users but also lowers publication costs by minimizing the physical size of Braille volumes.
             """
         )
     )
