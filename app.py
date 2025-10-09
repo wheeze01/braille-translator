@@ -531,7 +531,9 @@ if st.session_state.pending_swap:
 st.session_state.src_lang = st.session_state.src_lang_val
 st.session_state.tgt_lang = st.session_state.tgt_lang_val
 
-TEXT_LANGS = ["English", "Chinese", "Korean", "Braille"]
+# language options
+# TEXT_LANGS = ["English", "Chinese", "Korean", "Braille"]
+TEXT_LANGS = ["Korean", "Braille"]
 
 
 # ---- Pair/mode enforcement & helpers ----
