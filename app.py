@@ -654,7 +654,7 @@ with header_cols[2]:
 st.markdown(f"### Input ({st.session_state.src_lang})")
 st.session_state.src_text = st.text_area(
     "Source Text",
-    height=220,
+    height=110,
     label_visibility="collapsed",
     value=st.session_state.src_text,
     placeholder="Enter the text to be translated here.",
@@ -706,7 +706,7 @@ st.markdown(f"### Output ({st.session_state.tgt_lang})")
 st.text_area(
     "Target Text",
     # value=st.session_state.get("tgt_text", ""),
-    height=220,
+    height=110,
     label_visibility="collapsed",
     key="tgt_text",
     placeholder="The translation results are displayed here. Validation mode also allows you to enter your own text to verify.",
