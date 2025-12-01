@@ -503,14 +503,14 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-with st.expander("Abstract", expanded=True):
-    st.write(
-        textwrap.dedent(
-            """
-            Since its invention, Braille—a tactile writing system based on raised-dot patterns—has been an essential tool enabling visually impaired individuals to access textual information and engage with the world. In modern applications, Braille can be digitally encoded using a rule-based mapping from printed characters to Braille cells, as specified in language-specific contraction dictionaries. While these rule-based methods achieve satisfactory accuracy for simple text, they face significant challenges in handling ambiguities arising from Grade-2 contractions, complex syllabic structures in certain languages, and the translation of multilingual text. Moreover, most existing systems apply the same translation rules mechanically, without considering the genre and characteristics of the input text. This approach can be suboptimal, as meaning can be conveyed more effectively through concise expressions that reduce the reading burden for users. A more critical limitation lies in the post-translation stage: human verification by qualified experts—who are in short supply—is still required to ensure accuracy, leading to high publication costs and significant delays. To address these issues, we leverage recent advances in large language models. Specifically, we propose an LLM-based Text-to-Braille translation framework capable of 1) achieving enhanced translation accuracy; 2) generating context-aware expressions that convey meaning in a more accessible and contextually appropriate manner; and 3) automatically verifying translation outputs through forward-backward translation. The proposed framework was evaluated on a diverse corpus of Korean and Chinese documents. Compared to conventional rule-based approaches, our system achieves translation accuracy (chrF Score) of up to 99.936\%. Furthermore, our automated verification mechanism substantially reduces the time and cost associated with publishing Braille materials. Additionally, the system adaptively adjusts the level of summarization based on the input, condensing content and simplifying phrasing while preserving semantic fidelity. This not only reduces reading time and effort for end users but also lowers publication costs by minimizing the physical size of Braille volumes.
-            """
-        )
-    )
+# with st.expander("Abstract", expanded=True):
+#     st.write(
+#         textwrap.dedent(
+#             """
+#             Since its invention, Braille—a tactile writing system based on raised-dot patterns—has been an essential tool enabling visually impaired individuals to access textual information and engage with the world. In modern applications, Braille can be digitally encoded using a rule-based mapping from printed characters to Braille cells, as specified in language-specific contraction dictionaries. While these rule-based methods achieve satisfactory accuracy for simple text, they face significant challenges in handling ambiguities arising from Grade-2 contractions, complex syllabic structures in certain languages, and the translation of multilingual text. Moreover, most existing systems apply the same translation rules mechanically, without considering the genre and characteristics of the input text. This approach can be suboptimal, as meaning can be conveyed more effectively through concise expressions that reduce the reading burden for users. A more critical limitation lies in the post-translation stage: human verification by qualified experts—who are in short supply—is still required to ensure accuracy, leading to high publication costs and significant delays. To address these issues, we leverage recent advances in large language models. Specifically, we propose an LLM-based Text-to-Braille translation framework capable of 1) achieving enhanced translation accuracy; 2) generating context-aware expressions that convey meaning in a more accessible and contextually appropriate manner; and 3) automatically verifying translation outputs through forward-backward translation. The proposed framework was evaluated on a diverse corpus of Korean and Chinese documents. Compared to conventional rule-based approaches, our system achieves translation accuracy (chrF Score) of up to 99.936\%. Furthermore, our automated verification mechanism substantially reduces the time and cost associated with publishing Braille materials. Additionally, the system adaptively adjusts the level of summarization based on the input, condensing content and simplifying phrasing while preserving semantic fidelity. This not only reduces reading time and effort for end users but also lowers publication costs by minimizing the physical size of Braille volumes.
+#             """
+#         )
+#     )
 
 # [UI Tweak 1] 구분선 여백 줄이기 (st.divider 대신 HTML hr 사용)
 st.markdown(
@@ -613,7 +613,9 @@ else:
 # ----------------------------
 # Translation UI
 # ----------------------------
-mode = st.radio("Mode", ["Translation", "Validation"], horizontal=True)
+mode = st.radio(
+    "Mode", ["Translation", "Validation"], horizontal=True, label_visibility="collapsed"
+)
 
 # 버튼 상태
 disabled = st.session_state.get("action_disabled", True)
