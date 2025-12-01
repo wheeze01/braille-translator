@@ -691,7 +691,7 @@ st.markdown(
 )
 st.session_state.src_text = st.text_area(
     "Source Text",
-    height=110,
+    height=120,
     label_visibility="collapsed",
     value=st.session_state.src_text,
     placeholder="Enter the text to be translated here.",
@@ -747,7 +747,7 @@ st.markdown(
 st.text_area(
     "Target Text",
     # value=st.session_state.get("tgt_text", ""),
-    height=110,
+    height=150,
     label_visibility="collapsed",
     key="tgt_text",
     placeholder="The translation results are displayed here. Validation mode also allows you to enter your own text to verify.",
