@@ -469,9 +469,31 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
 # ----------------------------
 st.set_page_config(page_title="Braille Translation Demo", page_icon="⠁", layout="wide")
 
+# [Custom CSS] 여백 최소화를 위한 스타일 주입
 st.markdown(
     """
-    <div style="text-align:center; margin-top: 1.2rem">
+    <style>
+        /* 1. 기본 블록 패딩 줄이기 */
+        .block-container {
+            padding-top: 1.5rem;
+            padding-bottom: 2rem;
+        }
+        /* 2. 각 위젯(Element) 하단 여백 줄이기 */
+        .stElementContainer {
+            margin-bottom: -0.5rem;
+        }
+        /* 3. Expander 내부 여백은 유지하되, 외부 여백 조정 */
+        .streamlit-expander {
+            margin-bottom: 0px !important;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+    <div style="text-align:center; margin-top: 0rem">
       <h1 style="margin-bottom:0.2rem; font-size: 2.1rem; line-height:1.25;">
         LLM-Based System for Enhanced Text-to-Braille Translation:<br/>
         Incorporating Contextual Awareness and Automated Verification
@@ -490,7 +512,12 @@ with st.expander("Abstract", expanded=True):
         )
     )
 
-st.divider()
+# [UI Tweak 1] 구분선 여백 줄이기 (st.divider 대신 HTML hr 사용)
+st.markdown(
+    '<hr style="margin-top: 0.5rem; margin-bottom: 0.5rem; border: 0; border-top: 1px solid #f0f2f6;" />',
+    unsafe_allow_html=True,
+)
+
 
 # ----------------------------
 # Session state
@@ -598,7 +625,10 @@ llm_lang = st.session_state.get("llm_lang_eval", "")
 if mode == "Translation":
     col1, col2, col3 = st.columns([8, 2, 1])
     with col1:
-        st.markdown("## Translation")
+        st.markdown(
+            '<h2 style="margin-top: 0px; margin-bottom: 0px;">Translation</h2>',
+            unsafe_allow_html=True,
+        )
     with col2:
         go_sum_translate = st.button(
             "Summarize + Translate",
@@ -613,7 +643,10 @@ if mode == "Translation":
 elif mode == "Validation":
     col1, col2 = st.columns([9, 1])
     with col1:
-        st.markdown("## Validation")
+        st.markdown(
+            '<h2 style="margin-top: 0px; margin-bottom: 0px;">Validation</h2>',
+            unsafe_allow_html=True,
+        )
     with col2:
         go_validate_only = st.button(
             "Validate", type="primary", use_container_width=True, disabled=disabled
@@ -651,7 +684,11 @@ with header_cols[2]:
     )
 
 # Input
-st.markdown(f"### Input ({st.session_state.src_lang})")
+# [UI Tweak 2] Input 헤더 여백 줄이기 (margin-bottom: 5px)
+st.markdown(
+    f'<h3 style="margin-top: 0.2rem; margin-bottom: 0.3rem;">Input ({st.session_state.src_lang})</h3>',
+    unsafe_allow_html=True,
+)
 st.session_state.src_text = st.text_area(
     "Source Text",
     height=110,
@@ -702,7 +739,11 @@ if result:
     st.session_state["last_val_msg"] = validate_translation(src_for_validation, result)
 
 # Output
-st.markdown(f"### Output ({st.session_state.tgt_lang})")
+# [UI Tweak 3] Output 헤더 여백 줄이기 (위쪽 여백 0)
+st.markdown(
+    f'<h3 style="margin-top: 0rem; margin-bottom: 0.3rem;">Output ({st.session_state.tgt_lang})</h3>',
+    unsafe_allow_html=True,
+)
 st.text_area(
     "Target Text",
     # value=st.session_state.get("tgt_text", ""),
