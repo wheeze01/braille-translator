@@ -514,7 +514,7 @@ st.markdown(
 
 # [UI Tweak 1] 구분선 여백 줄이기 (st.divider 대신 HTML hr 사용)
 st.markdown(
-    '<hr style="margin-top: 0.5rem; margin-bottom: 1.0rem; border: 0; border-top: 1px solid #f0f2f6;" />',
+    '<hr style="margin-top: 0.5rem; margin-bottom: 1.5rem; border: 0; border-top: 1px solid #f0f2f6;" />',
     unsafe_allow_html=True,
 )
 
