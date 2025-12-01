@@ -749,7 +749,7 @@ st.markdown(
 st.text_area(
     "Target Text",
     # value=st.session_state.get("tgt_text", ""),
-    height=150,
+    height=135,
     label_visibility="collapsed",
     key="tgt_text",
     placeholder="The translation results are displayed here. Validation mode also allows you to enter your own text to verify.",
