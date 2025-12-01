@@ -693,7 +693,7 @@ st.markdown(
 )
 st.session_state.src_text = st.text_area(
     "Source Text",
-    height=120,
+    height=110,
     label_visibility="collapsed",
     value=st.session_state.src_text,
     placeholder="Enter the text to be translated here.",
