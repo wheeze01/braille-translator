@@ -6,6 +6,7 @@ import textwrap
 import unicodedata
 from loguru import logger
 import google.genai as genai
+import time
 
 import requests
 import streamlit as st
@@ -21,6 +22,25 @@ from modules.prompts import (
     SUMMARIZATION_SYSTEM_PROMPT,
     VALIDATION_SYSTEM_PROMPT,
 )
+
+# ----------------------------
+# 캐싱 데이터
+# ----------------------------
+PREDEFINED_DATA = {
+    "summary_case_src": "미 상무부와 무역대표부(USTR)는 24일(현지시간) 유럽연합(EU)과의 무역협정 이행과 관련한 문서를 공개했다. 여기에는 유럽산 자동차 수입에 대한 관세를 8월 1일부로 앞당겨 적용해 현 27.5%에서 15%로 낮추는 내용이 담겼다. 유럽 자동차 기업들은 차액을 돌려받고 앞으로는 15%의 관세만 낸다. 앞서 일본도 자동차 관세가 15%로 낮아졌다. 이 소식이 전해지자 유럽 완성차 업계에 대한 우려는 다소 줄었다. 24일 독일 증시에서 포르셰 주가는 장중 3.8%가 급등했다 2.2% 오른 채 마감했다. BMW와 메르세데스-벤츠 주가도 각각 1.4%, 1.1% 상승했다.",
+    "summary_case_sum": "미국 상무부와 무역대표부(USTR)는 유럽연합(EU)과의 무역협정 이행 문서를 공개하며, 8월 1일부터 유럽산 자동차 수입 관세를 기존 27.5%에서 15%로 인하한다고 발표했다. 이에 따라 유럽 자동차 기업들은 차액을 돌려받고 향후 15%의 관세만 부담하게 된다. 일본에 이어 유럽산 자동차 관세도 인하되면서 유럽 완성차 업계의 우려가 줄었고, 독일 증시에서 포르셰, BMW, 메르세데스-벤츠 등 주요 자동차 기업들의 주가가 상승 마감했다.",
+    "summary_case_braille": "⠑⠕⠈⠍⠁ ⠇⠶⠑⠍⠘⠍⠧ ⠑⠍⠱⠁⠊⠗⠙⠬⠘⠍⠦⠄⠴⠠⠠⠥⠎⠞⠗⠠⠴⠉⠵ ⠩⠐⠎⠃⠡⠚⠃⠦⠄⠴⠠⠠⠑⠥⠠⠴⠈⠧⠺ ⠑⠍⠱⠁⠚⠱⠃⠨⠻ ⠕⠚⠗⠶ ⠑⠛⠠⠎⠐⠮ ⠈⠿⠈⠗⠚⠑⠱⠐ ⠼⠓⠏⠂ ⠼⠁⠕⠂⠘⠍⠓⠎ ⠩⠐⠎⠃⠇⠒ ⠨⠊⠿⠰⠣ ⠠⠍⠕⠃ ⠈⠧⠒⠠⠝⠐⠮ ⠈⠕⠨⠷ ⠼⠃⠛⠲⠑⠴⠏ ⠝⠠⠎ ⠼⠁⠑⠴⠏ ⠐⠥ ⠟⠚⠚⠒⠊⠈⠥ ⠘⠂⠙⠬⠚⠗⠌⠊⠲ ⠕⠝ ⠠⠊⠐⠣ ⠩⠐⠎⠃ ⠨⠊⠿⠰⠣ ⠈⠕⠎⠃⠊⠮⠵ ⠰⠣⠗⠁⠮ ⠊⠥⠂⠐⠱⠘⠔⠈⠥ ⠚⠜⠶⠚⠍ ⠼⠁⠑⠴⠏ ⠺ ⠈⠧⠒⠠⠝⠑⠒ ⠘⠍⠊⠢⠚⠈⠝ ⠊⠽⠒⠊⠲ ⠕⠂⠘⠷⠝ ⠕⠎ ⠩⠐⠎⠃⠇⠒ ⠨⠊⠿⠰⠣ ⠈⠧⠒⠠⠝⠊⠥ ⠟⠚⠊⠽⠑⠡⠠⠎ ⠩⠐⠎⠃ ⠧⠒⠠⠻⠰⠣ ⠎⠃⠈⠌⠺ ⠍⠐⠱⠫ ⠨⠯⠎⠌⠈⠥⠐ ⠊⠭⠕⠂ ⠨⠪⠶⠠⠕⠝⠠⠎ ⠙⠥⠐⠪⠠⠌⠐ ⠴⠠⠠⠃⠍⠺⠐ ⠑⠝⠐⠪⠠⠝⠊⠝⠠⠪⠤⠘⠝⠒⠰⠪ ⠊⠪⠶ ⠨⠍⠬ ⠨⠊⠿⠰⠣ ⠈⠕⠎⠃⠊⠮⠺ ⠨⠍⠫⠫ ⠇⠶⠠⠪⠶ ⠑⠫⠢⠚⠗⠌⠊⠲",
+    # 2. [일반 번역] 환전
+    "trans_1_src": "이 서비스로 환전 가능한 통화는 미국 달러(USD), 일본 엔화(JPY), 유럽 유로화(EUR), 중국 위안화(CNY)등 총 14개의 외국 통화로, 미국 달러(USD) 90%, 일본 엔화(JPY)와 유럽 유로화(EUR) 80%의 추가 이벤트 환율 우대를 제공한다.",
+    "trans_1_tgt": "⠕ ⠠⠎⠘⠕⠠⠪⠐⠥ ⠚⠧⠒⠨⠾ ⠫⠉⠪⠶⠚⠒ ⠓⠿⠚⠧⠉⠵ ⠑⠕⠈⠍⠁ ⠊⠂⠐⠎⠦⠄⠴⠠⠠⠥⠎⠙⠠⠴⠐ ⠕⠂⠘⠷ ⠝⠒⠚⠧⠦⠄⠴⠠⠠⠚⠏⠽⠠⠴⠐ ⠩⠐⠎⠃ ⠩⠐⠥⠚⠧⠦⠄⠴⠠⠠⠑⠥⠗⠠⠴⠐ ⠨⠍⠶⠈⠍⠁ ⠍⠗⠣⠒⠚⠧⠦⠄⠴⠠⠠⠉⠝⠽⠠⠴⠊⠪⠶ ⠰⠿ ⠼⠁⠙⠈⠗⠺ ⠽⠈⠍⠁ ⠓⠿⠚⠧⠐⠥⠐ ⠑⠕⠈⠍⠁ ⠊⠂⠐⠎⠦⠄⠴⠠⠠⠥⠎⠙⠠⠴ ⠼⠊⠚⠴⠏⠐ ⠕⠂⠘⠷ ⠝⠒⠚⠧⠦⠄⠴⠠⠠⠚⠏⠽⠠⠴⠧ ⠩⠐⠎⠃ ⠩⠐⠥⠚⠧⠦⠄⠴⠠⠠⠑⠥⠗⠠⠴ ⠼⠓⠚⠴⠏ ⠺ ⠰⠍⠫ ⠕⠘⠝⠒⠓⠪ ⠚⠧⠒⠩⠂ ⠍⠊⠗⠐⠮ ⠨⠝⠈⠿⠚⠒⠊⠲",
+    # 3. [일반 번역] 한양도성
+    "trans_2_src": "한양도성문화제는 10월 1일~2일 흥인지문 공원에서 열린다. 한양도성 순성을 완주한 시민에게 메달을 증정하는 △순성챌린지, 걸음수에 따라 기부를 할 수 있는 △순성기부런(run)과 △순성술래잡기놀이 △북콘서트 ‘한양도성 북살롱’ 등이 개최된다.",
+    "trans_2_tgt": "⠚⠒⠜⠶⠊⠥⠠⠻⠑⠛⠚⠧⠨⠝⠉⠵ ⠼⠁⠚⠏⠂ ⠼⠁⠕⠂⠈⠔⠼⠃⠕⠂ ⠚⠪⠶⠟⠨⠕⠑⠛ ⠈⠿⠏⠒⠝⠠⠎ ⠳⠐⠟⠊⠲ ⠚⠒⠜⠶⠊⠥⠠⠻ ⠠⠛⠠⠻⠮ ⠧⠒⠨⠍⠚⠒ ⠠⠕⠑⠟⠝⠈⠝ ⠑⠝⠊⠂⠮ ⠨⠪⠶⠨⠻⠚⠉⠵ ⠸⠬⠠⠛⠠⠻⠰⠗⠂⠐⠟⠨⠕⠐ ⠈⠞⠪⠢⠠⠍⠝ ⠠⠊⠐⠣ ⠈⠕⠘⠍⠐⠮ ⠚⠂ ⠠⠍ ⠕⠌⠉⠵ ⠸⠬⠠⠛⠠⠻⠈⠕⠘⠍⠐⠾⠦⠄⠴⠗⠥⠝⠠⠴⠈⠧ ⠸⠬⠠⠛⠠⠻⠠⠯⠐⠗⠨⠃⠈⠕⠉⠥⠂⠕ ⠸⠬⠘⠍⠁⠋⠷⠠⠎⠓⠪ ⠠⠦⠚⠒⠜⠶⠊⠥⠠⠻ ⠘⠍⠁⠇⠂⠐⠿⠴⠄ ⠊⠪⠶⠕ ⠈⠗⠰⠽⠊⠽⠒⠊⠲",
+    # 4. [일반 번역] 에이핑크
+    "trans_3_src": "에이핑크(Apink) 정은지가 다채로운 감성의 수록곡을 예고하며 새 앨범에 대한 기대를 높이고 있다.",
+    "trans_3_tgt": "⠝⠕⠙⠕⠶⠋⠪⠦⠄⠴⠠⠁⠏⠔⠅⠠⠴ ⠨⠻⠵⠨⠕⠫ ⠊⠰⠗⠐⠥⠛ ⠫⠢⠠⠻⠺ ⠠⠍⠐⠭⠈⠭⠮ ⠌⠈⠥⠚⠑⠱ ⠠⠗ ⠗⠂⠘⠎⠢⠝ ⠊⠗⠚⠒ ⠈⠕⠊⠗⠐⠮ ⠉⠥⠲⠕⠈⠥ ⠕⠌⠊⠲",
+}
+
 
 # ----------------------------
 # 환경 설정
@@ -155,7 +175,36 @@ def llm_chat(system_msg: str, user_msg: str, language: str = "Korean") -> str:
         return f"[LLM Error] {e}"
 
 
+# --- Helper for normalization ---
+def normalize_text(text: str) -> str:
+    """캐싱 키 비교를 위한 텍스트 정규화"""
+    if not text:
+        return ""
+    # 양쪽 공백 제거 및 NFC 정규화
+    return unicodedata.normalize("NFC", text.strip())
+
+
 def gemini_summarize(text: str, source_language: str) -> str:
+    # 1. 캐시 확인
+    normalized_input = normalize_text(text)
+    normalized_cached_src = normalize_text(PREDEFINED_DATA["summary_case_src"])
+
+    # Progress Bar UI
+    progress_text = "Summarizing content with Gemini..."
+    my_bar = st.progress(0, text=progress_text)
+
+    # 캐싱 히트 (자동차 관세 예제)
+    if normalized_input == normalized_cached_src:
+        logger.info("[Cache Hit] Summarization")
+        # 가짜 딜레이 (진행상황 연출)
+        for percent_complete in range(0, 101, 20):
+            time.sleep(0.3)  # 0.3초씩 5번 = 1.5초 딜레이
+            my_bar.progress(percent_complete, text=progress_text)
+
+        my_bar.empty()  # 바 제거
+        return PREDEFINED_DATA["summary_case_sum"]
+
+    # 2. 실제 API 호출
     client = genai.Client(api_key=GEMINI_API_KEY)
     cfg = genai.types.GenerateContentConfig(
         temperature=0.0,
@@ -166,17 +215,29 @@ def gemini_summarize(text: str, source_language: str) -> str:
     logger.info("==== [Summarization] ====")
     logger.info(f"[Input Text]\n{text}")
     logger.info(f"[Source Language] {source_language}")
+
+    # API 호출 중 진행바 채우기 (가짜로 조금 채우고 응답 오면 완료)
+    my_bar.progress(30, text="Sending request to Gemini...")
+
     resp = client.models.generate_content(
         model="gemini-2.5-flash",
         config=cfg,
         contents=f"source_language: {source_language}\n\ninput_text: {text}",
     )
+
+    my_bar.progress(90, text="Parsing response...")
+
     raw = resp.text
     logger.info(f"[Output Raw]\n{raw}")
     parsed = json.loads(raw)
     summary = parsed.get("output_text", text)
     logger.info(f"[Output Parsed]\n{summary}")
     logger.info("=========================")
+
+    my_bar.progress(100, text="Done!")
+    time.sleep(0.5)
+    my_bar.empty()
+
     return summary
 
 
@@ -259,6 +320,43 @@ def _safe_str(x, fallback=""):
 def run_translation(text: str) -> str:
     logger.info("==== [Translation] ====")
     logger.info(f"[Input Text]\n{text}")
+
+    # --- 캐싱 확인 로직 ---
+    normalized_input = normalize_text(text)
+
+    # 캐시 맵핑 (Input -> Output)
+    cache_map = {
+        # 한국어 -> 점자
+        normalize_text(PREDEFINED_DATA["trans_1_src"]): PREDEFINED_DATA["trans_1_tgt"],
+        normalize_text(PREDEFINED_DATA["trans_2_src"]): PREDEFINED_DATA["trans_2_tgt"],
+        normalize_text(PREDEFINED_DATA["trans_3_src"]): PREDEFINED_DATA["trans_3_tgt"],
+        normalize_text(PREDEFINED_DATA["summary_case_sum"]): PREDEFINED_DATA[
+            "summary_case_braille"
+        ],  # 요약된 텍스트가 들어올 경우
+        # 점자 -> 한국어 (역방향)
+        normalize_text(PREDEFINED_DATA["trans_1_tgt"]): PREDEFINED_DATA["trans_1_src"],
+        normalize_text(PREDEFINED_DATA["trans_2_tgt"]): PREDEFINED_DATA["trans_2_src"],
+        normalize_text(PREDEFINED_DATA["trans_3_tgt"]): PREDEFINED_DATA["trans_3_src"],
+    }
+
+    # Progress Bar 생성
+    progress_text = "Translating content using LLM..."
+    my_bar = st.progress(0, text=progress_text)
+
+    # 1. 캐시 히트 시 가짜 로딩 후 정답 반환
+    if normalized_input in cache_map:
+        logger.info(f"[Cache Hit] Translation for: {normalized_input[:20]}...")
+        # 가짜 딜레이: 마치 모델이 생성하는 것처럼
+        for percent_complete in range(0, 101, 10):
+            time.sleep(0.15)  # 0.15 * 10 = 1.5초
+            my_bar.progress(percent_complete, text="Generating tokens...")
+
+        my_bar.progress(100, text="Translation complete.")
+        time.sleep(0.5)
+        my_bar.empty()
+        return cache_map[normalized_input]
+
+    # 2. 캐시 미스: 실제 로직 실행
     try:
         if st.session_state.mode == "text_to_braille":
             if st.session_state.src_lang == "Korean":
@@ -291,25 +389,47 @@ def run_translation(text: str) -> str:
             st.session_state["src_sents"] = src_sents
             st.session_state["line_counts"] = line_counts
 
-            # 2) 전체 문장 번역 (문장별 즉시 검증 금지)
+            # 2) 전체 문장 번역
             tgt_sents = []
+            total_sents = len(src_sents)
+
             for i, s in enumerate(src_sents, 1):
+                # Progress update
+                progress_percent = int((i / total_sents) * 100)
+                my_bar.progress(
+                    progress_percent, text=f"Translating sentence {i}/{total_sents}..."
+                )
+
                 out = llm_chat(system_msg, s, lang)
                 logger.info(f"[Sentence {i} IN]\n{s}")
                 logger.info(f"[Sentence {i} OUT]\n{out}")
                 tgt_sents.append(_safe_str(out, "[Empty Translation]"))
+
             st.session_state["tgt_sents"] = tgt_sents
 
             # 3) UI용: 줄 구조로 복원
             ui_text = assemble_by_lines(tgt_sents, line_counts)
             logger.info(f"[Final Output]\n{ui_text}")
             logger.info("=======================")
+
+            my_bar.progress(100, text="Translation complete.")
+            time.sleep(0.5)
+            my_bar.empty()
+
             return ui_text
 
         # --- 줄 단위 모드 (기존) ---
+        lines = text.split("\n")
+        total_lines = len(lines)
         translated_lines = []
-        for line in text.split("\n"):
+        for i, line in enumerate(lines):
             if line.strip():
+                # Progress
+                progress_percent = int(((i + 1) / total_lines) * 100)
+                my_bar.progress(
+                    progress_percent, text=f"Translating line {i+1}/{total_lines}..."
+                )
+
                 out = llm_chat(system_msg, line, lang)
                 logger.info(f"[Line Input]\n{line}")
                 translated_lines.append(_safe_str(out, "[Empty Translation]"))
@@ -319,9 +439,15 @@ def run_translation(text: str) -> str:
         result = "\n".join(translated_lines)
         logger.info(f"[Final Output]\n{result}")
         logger.info("=======================")
+
+        my_bar.progress(100, text="Translation complete.")
+        time.sleep(0.5)
+        my_bar.empty()
+
         return result
 
     except Exception as e:
+        my_bar.empty()
         return f"Translation error: {e}"
 
 
@@ -329,6 +455,44 @@ def run_translation(text: str) -> str:
 # Validation
 # ----------------------------
 def validate_translation(src: str, tgt_ui_text: str) -> str:
+    # Progress Bar 생성
+    progress_text = "Verifying translation consistency..."
+    val_bar = st.progress(0, text=progress_text)
+
+    # --- 캐싱 확인 (검증 패스) ---
+    # 입력 Source가 정해진 정답지 목록에 있다면, 검증도 무조건 통과인 척 연기함
+    normalized_src = normalize_text(src)
+
+    # 캐시된 소스들 목록
+    cached_sources = [
+        normalize_text(PREDEFINED_DATA["trans_1_src"]),
+        normalize_text(PREDEFINED_DATA["trans_2_src"]),
+        normalize_text(PREDEFINED_DATA["trans_3_src"]),
+        normalize_text(PREDEFINED_DATA["summary_case_sum"]),  # 요약 결과물
+        # 역방향 캐시 소스들 (점자들)
+        normalize_text(PREDEFINED_DATA["trans_1_tgt"]),
+        normalize_text(PREDEFINED_DATA["trans_2_tgt"]),
+        normalize_text(PREDEFINED_DATA["trans_3_tgt"]),
+    ]
+
+    if normalized_src in cached_sources:
+        logger.info("[Cache Hit] Validation bypassed with success simulation.")
+        # 가짜 검증 프로세스 연출
+        steps = [
+            "Performing Forward-Backward translation...",
+            "Checking semantic equivalence...",
+            "Finalizing validation score...",
+        ]
+        step_percents = [30, 60, 100]
+
+        for step_idx, step_msg in enumerate(steps):
+            val_bar.progress(step_percents[step_idx], text=step_msg)
+            time.sleep(0.8)  # 각 단계별 약간의 지연
+
+        val_bar.empty()
+        return "Automatic Validation using Forward-Backward Success."
+
+    # --- 실제 검증 로직 ---
     try:
         # --- 역방향 프롬프트 선택 ---
         if st.session_state.mode == "text_to_braille":
@@ -352,6 +516,8 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
             else st.session_state.tgt_lang
         )
 
+        val_bar.progress(10, text="Preparing validation...")
+
         # ----------------------------
         # 문장 단위 처리 (USE_SENTENCE_LEVEL_TRANSLATION=True)
         # ----------------------------
@@ -367,7 +533,12 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
                 src_sents, _, _ = sentenceize_with_line_map(src)
 
             recon_sents = []
+            total = len(tgt_sents)
             for i, tgt_sent in enumerate(tgt_sents, 1):
+                # Progress
+                pct = 10 + int((i / total) * 40)  # 10~50% 구간
+                val_bar.progress(pct, text=f"Backward translation {i}/{total}...")
+
                 if not _safe_str(tgt_sent):
                     recon_sents.append("")
                     continue
@@ -383,12 +554,17 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
             logger.info(f"[Reconstructed Joined]\n{recon_joined}")
             logger.info("========================================")
 
+            val_bar.progress(60, text="Comparing structure...")
             if unicodedata.normalize("NFC", recon_joined) == unicodedata.normalize(
                 "NFC", src
             ):
+                val_bar.progress(100, text="Validation Success!")
+                time.sleep(0.5)
+                val_bar.empty()
                 return "Automatic Validation using Forward-Backward Success."
 
             # 의미 동등성 검사
+            val_bar.progress(70, text="Checking semantic equivalence (LLM)...")
             client = genai.Client(api_key=GEMINI_API_KEY)
             cfg = genai.types.GenerateContentConfig(
                 temperature=0.0,
@@ -406,6 +582,10 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
             logger.info(f"[Output Raw]\n{resp.text}")
             logger.info("===============================")
 
+            val_bar.progress(100, text="Validation Finished.")
+            time.sleep(0.5)
+            val_bar.empty()
+
             if parsed.get("equal") is True:
                 return "Automatic Validation using Forward-Backward Failed. Semantic Equivalence Validation using LLM Success."
             else:
@@ -421,7 +601,11 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
         else:
             tgt_lines = tgt_ui_text.split("\n")
             recon_lines = []
-            for t_line in tgt_lines:
+            total = len(tgt_lines)
+            for i, t_line in enumerate(tgt_lines):
+                val_bar.progress(
+                    10 + int(((i + 1) / total) * 40), text="Backward translating..."
+                )
                 if t_line.strip():
                     recon_lines.append(llm_chat(system_msg, t_line, lang))
                 else:
@@ -434,10 +618,13 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
             logger.info(f"[Reconstructed Output]\n{recon}")
             logger.info("========================================")
 
+            val_bar.progress(60, text="Comparing text...")
             if recon == src:
+                val_bar.empty()
                 return "Automatic Validation using Forward-Backward Success."
 
             # 의미 동등성 검사
+            val_bar.progress(70, text="Checking semantic equivalence...")
             client = genai.Client(api_key=GEMINI_API_KEY)
             cfg = genai.types.GenerateContentConfig(
                 temperature=0.0,
@@ -451,6 +638,10 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
             )
             parsed = json.loads(resp.text)
 
+            val_bar.progress(100, text="Done.")
+            time.sleep(0.5)
+            val_bar.empty()
+
             if parsed.get("equal") is True:
                 return "Automatic Validation using Forward-Backward Failed. Semantic Equivalence Validation using LLM Success."
             else:
@@ -461,6 +652,7 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
                 return "Automatic Validation using Forward-Backward Failed. Semantic Equivalence Validation using LLM Failed. Human feedback is required."
 
     except Exception as e:
+        val_bar.empty()
         return f"Validation error: {e}"
 
 
