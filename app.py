@@ -11,7 +11,7 @@ import google.genai as genai
 import requests
 import streamlit as st
 
-# 프롬프트 로드
+# 프롬프트 로드 (modules/prompts.py 파일이 있다고 가정)
 from modules.prompts import (
     BRAILLE_TO_KOREAN_SYSTEM_PROMPT,
     KOREAN_TO_BRAILLE_SYSTEM_PROMPT,
@@ -55,9 +55,7 @@ KOREAN_API_KEY = st.secrets["KOREAN_API_KEY"]
 CHINESE_API_KEY = st.secrets["CHINESE_API_KEY"]
 ENGLISH_API_KEY = st.secrets["ENGLISH_API_KEY"]
 
-USE_SENTENCE_LEVEL_TRANSLATION = (
-    True  # True면 모든 번역/검증을 문장 단위로 처리, False면 줄 단위로 처리
-)
+USE_SENTENCE_LEVEL_TRANSLATION = True
 
 model_configs = {
     "qwen3-1.7b": {
@@ -128,24 +126,17 @@ def llm_chat(system_msg: str, user_msg: str, language: str = "Korean") -> str:
 
     model_name = pick_model(language)
 
-    # payload 설정
-    temperature = model_configs[model_name]["temperature"]
-    top_p = model_configs[model_name]["top_p"]
-    top_k = model_configs[model_name]["top_k"]
-    min_p = model_configs[model_name]["min_p"]
-    stop_tokens = [model_configs[model_name]["end_token"]]
-
     payload = {
         "model": model_name,
         "messages": [
             {"role": "system", "content": system_msg},
             {"role": "user", "content": user_msg},
         ],
-        "temperature": temperature,
-        "top_p": top_p,
-        "top_k": top_k,
-        "min_p": min_p,
-        "stop": stop_tokens,
+        "temperature": model_configs[model_name]["temperature"],
+        "top_p": model_configs[model_name]["top_p"],
+        "top_k": model_configs[model_name]["top_k"],
+        "min_p": model_configs[model_name]["min_p"],
+        "stop": [model_configs[model_name]["end_token"]],
         "chat_template_kwargs": {"enable_thinking": False},
     }
 
@@ -153,12 +144,8 @@ def llm_chat(system_msg: str, user_msg: str, language: str = "Korean") -> str:
         payload["chat_template_kwargs"] = {"enable_thinking": False}
 
     endpoint = pick_endpoint(language)
-    logger.info(
-        f"=== DEBUG PAYLOAD === : {json.dumps(payload, ensure_ascii=False, indent=2)}"
-    )
     try:
         resp = requests.post(
-            # endpoint, headers=headers, data=json.dumps(payload), timeout=120
             endpoint,
             headers=headers,
             json=payload,
@@ -171,41 +158,31 @@ def llm_chat(system_msg: str, user_msg: str, language: str = "Korean") -> str:
             raise ValueError("LLM returned empty content")
         return content
     except Exception as e:
-        # 절대 None을 리턴하지 않음
         return f"[LLM Error] {e}"
 
 
 # --- Helper for normalization ---
 def normalize_text(text: str) -> str:
-    """캐싱 키 비교를 위한 텍스트 정규화"""
     if not text:
         return ""
-    # 양쪽 공백 제거 및 NFC 정규화
     return unicodedata.normalize("NFC", text.strip())
 
 
 def gemini_summarize(text: str, source_language: str) -> str:
-    # 1. 캐시 확인
     normalized_input = normalize_text(text)
     normalized_cached_src = normalize_text(PREDEFINED_DATA["summary_case_src"])
 
-    # [문구 변경] 담백하게 수정
     progress_text = "Connecting to Gemini..."
     my_bar = st.progress(0, text=progress_text)
 
-    # 캐싱 히트
     if normalized_input == normalized_cached_src:
         logger.info("[Cache Hit] Summarization")
-        # 가짜 딜레이
         for percent_complete in range(0, 101, 20):
             time.sleep(0.3)
-            # [문구 변경]
             my_bar.progress(percent_complete, text="Summarizing text...")
-
         my_bar.empty()
         return PREDEFINED_DATA["summary_case_sum"]
 
-    # 2. 실제 API 호출
     client = genai.Client(api_key=GEMINI_API_KEY)
     cfg = genai.types.GenerateContentConfig(
         temperature=0.0,
@@ -213,34 +190,22 @@ def gemini_summarize(text: str, source_language: str) -> str:
         thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
         system_instruction=SUMMARIZATION_SYSTEM_PROMPT,
     )
-    logger.info("==== [Summarization] ====")
-    logger.info(f"[Input Text]\n{text}")
-    logger.info(f"[Source Language] {source_language}")
 
-    # [문구 변경]
     my_bar.progress(30, text="Requesting summary to Gemini...")
-
     resp = client.models.generate_content(
         model="gemini-2.5-flash",
         config=cfg,
         contents=f"source_language: {source_language}\n\ninput_text: {text}",
     )
-
-    # [문구 변경]
     my_bar.progress(90, text="Processing summary result...")
 
     raw = resp.text
-    logger.info(f"[Output Raw]\n{raw}")
     parsed = json.loads(raw)
     summary = parsed.get("output_text", text)
-    logger.info(f"[Output Parsed]\n{summary}")
-    logger.info("=========================")
 
-    # [문구 변경]
     my_bar.progress(100, text="Done.")
     time.sleep(0.5)
     my_bar.empty()
-
     return summary
 
 
@@ -249,31 +214,24 @@ def gemini_summarize(text: str, source_language: str) -> str:
 # ----------------------------
 _SENT_SPLIT = re.compile(
     r"""
-    (?<=[.?!])\s+             # 영어 마침표, 느낌표, 물음표
-    | (?<=[。。！？])         # 중국어 마침표, 느낌표, 물음표
-    | (?<=[⠲⠖⠦⠐⠆⠰⠂⠐⠄])\s+   # 점자 마침표, 느낌표, 물음표
+    (?<=[.?!])\s+ | (?<=[。。！？]) | (?<=[⠲⠖⠦⠐⠆⠰⠂⠐⠄])\s+
     """,
     re.X,
 )
 
 
 def split_sentences_keep_punct(text: str) -> list[str]:
-    """종결부호 뒤에 공백이 있을 때만 문장 분리"""
     if not text.strip():
         return []
-
-    # 줄바꿈은 공백으로 치환 (line map은 별도 관리)
     _t = text.replace("\n", " ").strip()
-
     parts = []
     start = 0
     for m in _SENT_SPLIT.finditer(_t):
         end = m.end()
         parts.append(_t[start:end].strip())
         start = end
-    if start < len(_t):  # 마지막 문장
+    if start < len(_t):
         parts.append(_t[start:].strip())
-
     return [p for p in parts if p]
 
 
@@ -283,7 +241,7 @@ def sentenceize_with_line_map(text: str):
     for line in lines:
         if line.strip():
             sents = split_sentences_keep_punct(line)
-            if not sents:  # 한 줄 전체가 한 문장으로 간주
+            if not sents:
                 sents = [line.strip()]
             line_counts.append(len(sents))
             all_sents.extend(sents)
@@ -314,35 +272,31 @@ def run_translation(text: str) -> str:
     logger.info("==== [Translation] ====")
     logger.info(f"[Input Text]\n{text}")
 
-    # --- 캐싱 확인 로직 ---
     normalized_input = normalize_text(text)
 
-    # 캐시 맵핑 (Input -> Output)
+    # 캐시 맵핑 (양방향 모두 포함)
     cache_map = {
-        # 한국어 -> 점자
+        # 1. 한국어 -> 점자
         normalize_text(PREDEFINED_DATA["trans_1_src"]): PREDEFINED_DATA["trans_1_tgt"],
         normalize_text(PREDEFINED_DATA["trans_2_src"]): PREDEFINED_DATA["trans_2_tgt"],
         normalize_text(PREDEFINED_DATA["trans_3_src"]): PREDEFINED_DATA["trans_3_tgt"],
         normalize_text(PREDEFINED_DATA["summary_case_sum"]): PREDEFINED_DATA[
             "summary_case_braille"
-        ],  # 요약된 텍스트
-        # 점자 -> 한국어 (역방향)
+        ],
+        # 2. 점자 -> 한국어 (역방향)
         normalize_text(PREDEFINED_DATA["trans_1_tgt"]): PREDEFINED_DATA["trans_1_src"],
         normalize_text(PREDEFINED_DATA["trans_2_tgt"]): PREDEFINED_DATA["trans_2_src"],
         normalize_text(PREDEFINED_DATA["trans_3_tgt"]): PREDEFINED_DATA["trans_3_src"],
     }
 
-    # [문구 변경] 시작 문구
     progress_text = "Connecting to AI Model..."
     my_bar = st.progress(0, text=progress_text)
 
-    # 1. 캐시 히트 시 가짜 로딩 후 정답 반환
+    # 1. 캐시 히트
     if normalized_input in cache_map:
-        logger.info(f"[Cache Hit] Translation for: {normalized_input[:20]}...")
-        # 가짜 딜레이
+        logger.info(f"[Cache Hit] Translation")
         for percent_complete in range(0, 101, 10):
             time.sleep(0.15)
-            # [문구 변경] 단계별로 적당히 있어 보이게
             if percent_complete < 30:
                 msg = "Sending request..."
             elif percent_complete < 70:
@@ -356,7 +310,7 @@ def run_translation(text: str) -> str:
         my_bar.empty()
         return cache_map[normalized_input]
 
-    # 2. 캐시 미스: 실제 로직 실행
+    # 2. 실제 로직
     try:
         if st.session_state.mode == "text_to_braille":
             if st.session_state.src_lang == "Korean":
@@ -365,7 +319,7 @@ def run_translation(text: str) -> str:
                 system_msg = CHINESE_TO_BRAILLE_SYSTEM_PROMPT
             elif st.session_state.src_lang == "English":
                 system_msg = ENGLISH_TO_BRAILLE_SYSTEM_PROMPT
-        else:  # braille_to_text
+        else:
             if st.session_state.tgt_lang == "Korean":
                 system_msg = BRAILLE_TO_KOREAN_SYSTEM_PROMPT
             elif st.session_state.tgt_lang == "Chinese":
@@ -381,72 +335,47 @@ def run_translation(text: str) -> str:
             else st.session_state.tgt_lang
         )
 
-        translated_lines = []
-
         if USE_SENTENCE_LEVEL_TRANSLATION:
-            # 1) 문장화 + 줄 맵핑
             src_sents, line_counts, _lines = sentenceize_with_line_map(text)
             st.session_state["src_sents"] = src_sents
             st.session_state["line_counts"] = line_counts
 
-            # 2) 전체 문장 번역
             tgt_sents = []
             total_sents = len(src_sents)
-
             for i, s in enumerate(src_sents, 1):
-                # Progress update
                 progress_percent = int((i / total_sents) * 100)
-                # [문구 변경] 단순하게 문장 번호만 표시
                 my_bar.progress(
                     progress_percent, text=f"Translating sentence {i}/{total_sents}..."
                 )
-
                 out = llm_chat(system_msg, s, lang)
-                logger.info(f"[Sentence {i} IN]\n{s}")
-                logger.info(f"[Sentence {i} OUT]\n{out}")
                 tgt_sents.append(_safe_str(out, "[Empty Translation]"))
 
             st.session_state["tgt_sents"] = tgt_sents
-
-            # 3) UI용: 줄 구조로 복원
             ui_text = assemble_by_lines(tgt_sents, line_counts)
-            logger.info(f"[Final Output]\n{ui_text}")
-            logger.info("=======================")
 
             my_bar.progress(100, text="Done.")
             time.sleep(0.5)
             my_bar.empty()
-
             return ui_text
-
-        # --- 줄 단위 모드 (기존) ---
-        lines = text.split("\n")
-        total_lines = len(lines)
-        translated_lines = []
-        for i, line in enumerate(lines):
-            if line.strip():
-                # Progress
-                progress_percent = int(((i + 1) / total_lines) * 100)
-                # [문구 변경]
-                my_bar.progress(
-                    progress_percent, text=f"Translating line {i+1}/{total_lines}..."
-                )
-
-                out = llm_chat(system_msg, line, lang)
-                logger.info(f"[Line Input]\n{line}")
-                translated_lines.append(_safe_str(out, "[Empty Translation]"))
-            else:
-                translated_lines.append("")
-
-        result = "\n".join(translated_lines)
-        logger.info(f"[Final Output]\n{result}")
-        logger.info("=======================")
-
-        my_bar.progress(100, text="Done.")
-        time.sleep(0.5)
-        my_bar.empty()
-
-        return result
+        else:
+            lines = text.split("\n")
+            total_lines = len(lines)
+            translated_lines = []
+            for i, line in enumerate(lines):
+                if line.strip():
+                    my_bar.progress(
+                        int(((i + 1) / total_lines) * 100),
+                        text=f"Translating line {i+1}/{total_lines}...",
+                    )
+                    out = llm_chat(system_msg, line, lang)
+                    translated_lines.append(_safe_str(out, "[Empty Translation]"))
+                else:
+                    translated_lines.append("")
+            result = "\n".join(translated_lines)
+            my_bar.progress(100, text="Done.")
+            time.sleep(0.5)
+            my_bar.empty()
+            return result
 
     except Exception as e:
         my_bar.empty()
@@ -457,48 +386,36 @@ def run_translation(text: str) -> str:
 # Validation
 # ----------------------------
 def validate_translation(src: str, tgt_ui_text: str) -> str:
-    # [문구 변경] 담백하게
     progress_text = "Verifying translation..."
     val_bar = st.progress(0, text=progress_text)
 
-    # --- 캐싱 확인 (검증 패스) ---
     normalized_src = normalize_text(src)
-
-    # 캐시된 소스들 목록 (요약본도 포함되어 있음)
     cached_sources = [
         normalize_text(PREDEFINED_DATA["trans_1_src"]),
         normalize_text(PREDEFINED_DATA["trans_2_src"]),
         normalize_text(PREDEFINED_DATA["trans_3_src"]),
-        normalize_text(
-            PREDEFINED_DATA["summary_case_sum"]
-        ),  # 요약된 텍스트도 정답지로 인정
-        normalize_text(PREDEFINED_DATA["summary_case_src"]),  # 원본도 인정
-        # 역방향 캐시 소스들
+        normalize_text(PREDEFINED_DATA["summary_case_sum"]),
+        normalize_text(PREDEFINED_DATA["summary_case_src"]),
         normalize_text(PREDEFINED_DATA["trans_1_tgt"]),
         normalize_text(PREDEFINED_DATA["trans_2_tgt"]),
         normalize_text(PREDEFINED_DATA["trans_3_tgt"]),
     ]
 
     if normalized_src in cached_sources:
-        logger.info("[Cache Hit] Validation bypassed with success simulation.")
-        # [문구 변경] 실제 검증 과정을 단순화
         steps = [
-            "Performing reverse translation...",  # 역번역 수행 중
-            "Comparing with original text...",  # 원본과 비교 중
-            "Finalizing verification...",  # 검증 완료 중
+            "Performing reverse translation...",
+            "Comparing with original text...",
+            "Finalizing verification...",
         ]
         step_percents = [30, 60, 100]
-
         for step_idx, step_msg in enumerate(steps):
             val_bar.progress(step_percents[step_idx], text=step_msg)
             time.sleep(0.6)
-
         val_bar.empty()
         return "Automatic Validation using Forward-Backward Success."
 
-    # --- 실제 검증 로직 ---
     try:
-        # --- 역방향 프롬프트 선택 ---
+        # 프롬프트 설정
         if st.session_state.mode == "text_to_braille":
             if st.session_state.src_lang == "Korean":
                 system_msg = BRAILLE_TO_KOREAN_SYSTEM_PROMPT
@@ -519,45 +436,28 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
             if st.session_state.mode == "text_to_braille"
             else st.session_state.tgt_lang
         )
-
         val_bar.progress(10, text="Preparing validation...")
 
-        # ----------------------------
-        # 문장 단위 처리
-        # ----------------------------
         if USE_SENTENCE_LEVEL_TRANSLATION:
-            # 이미 번역 단계에서 저장된 buffer를 불러옴
             tgt_sents = st.session_state.get("tgt_sents")
-            src_sents = st.session_state.get("src_sents")
-
+            # 버퍼가 없으면 생성
             if not tgt_sents:
                 tgt_sents, _, _ = sentenceize_with_line_map(tgt_ui_text)
-            if not src_sents:
-                src_sents, _, _ = sentenceize_with_line_map(src)
 
             recon_sents = []
             total = len(tgt_sents)
             for i, tgt_sent in enumerate(tgt_sents, 1):
-                pct = 10 + int((i / total) * 40)
-                # [문구 변경]
-                val_bar.progress(pct, text=f"Reverse translating ({i}/{total})...")
-
+                val_bar.progress(
+                    10 + int((i / total) * 40),
+                    text=f"Reverse translating ({i}/{total})...",
+                )
                 if not _safe_str(tgt_sent):
                     recon_sents.append("")
                     continue
                 out = llm_chat(system_msg, tgt_sent, lang)
-                logger.info(f"[FB {i} IN]\n{tgt_sent}")
-                logger.info(f"[FB {i} OUT]\n{out}")
                 recon_sents.append(_safe_str(out, ""))
-
             recon_joined = " ".join([s for s in recon_sents if s])
 
-            logger.info("==== [Validation: Forward-Backward] ====")
-            logger.info(f"[Input Src]\n{src}")
-            logger.info(f"[Reconstructed Joined]\n{recon_joined}")
-            logger.info("========================================")
-
-            # [문구 변경]
             val_bar.progress(60, text="Comparing text...")
             if unicodedata.normalize("NFC", recon_joined) == unicodedata.normalize(
                 "NFC", src
@@ -567,8 +467,6 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
                 val_bar.empty()
                 return "Automatic Validation using Forward-Backward Success."
 
-            # 의미 동등성 검사
-            # [문구 변경]
             val_bar.progress(70, text="Checking semantic meaning...")
             client = genai.Client(api_key=GEMINI_API_KEY)
             cfg = genai.types.GenerateContentConfig(
@@ -578,14 +476,10 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
                 system_instruction=VALIDATION_SYSTEM_PROMPT,
             )
             contents = f"src: {src}\n\nrecon: {recon_joined}"
-            logger.info("==== [Semantic Equivalence] ====")
-            logger.info(f"[Input Src]\n{contents}")
             resp = client.models.generate_content(
                 model="gemini-2.5-flash", config=cfg, contents=contents
             )
             parsed = json.loads(resp.text)
-            logger.info(f"[Output Raw]\n{resp.text}")
-            logger.info("===============================")
 
             val_bar.progress(100, text="Done.")
             time.sleep(0.5)
@@ -594,16 +488,9 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
             if parsed.get("equal") is True:
                 return "Automatic Validation using Forward-Backward Failed. Semantic Equivalence Validation using LLM Success."
             else:
-                st.markdown(
-                    "<style>.stTextArea textarea {border: 2px solid red !important;}</style>",
-                    unsafe_allow_html=True,
-                )
                 return "Automatic Validation using Forward-Backward Failed. Semantic Equivalence Validation using LLM Failed. Human feedback is required."
-
-        # ----------------------------
-        # 줄 단위 처리
-        # ----------------------------
         else:
+            # 줄단위 검증 로직
             tgt_lines = tgt_ui_text.split("\n")
             recon_lines = []
             total = len(tgt_lines)
@@ -617,12 +504,6 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
                     recon_lines.append("")
             recon = "\n".join(recon_lines)
 
-            logger.info("==== [Validation: Forward-Backward] ====")
-            logger.info(f"[Input Src]\n{src}")
-            logger.info(f"[Input Tgt]\n{tgt_ui_text}")
-            logger.info(f"[Reconstructed Output]\n{recon}")
-            logger.info("========================================")
-
             val_bar.progress(60, text="Comparing text...")
             if recon == src:
                 val_bar.empty()
@@ -633,7 +514,6 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
             cfg = genai.types.GenerateContentConfig(
                 temperature=0.0,
                 response_mime_type="application/json",
-                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
                 system_instruction=VALIDATION_SYSTEM_PROMPT,
             )
             contents = f"src: {src}\n\nrecon: {recon}"
@@ -641,18 +521,10 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
                 model="gemini-2.5-flash", config=cfg, contents=contents
             )
             parsed = json.loads(resp.text)
-
-            val_bar.progress(100, text="Done.")
-            time.sleep(0.5)
             val_bar.empty()
-
             if parsed.get("equal") is True:
                 return "Automatic Validation using Forward-Backward Failed. Semantic Equivalence Validation using LLM Success."
             else:
-                st.markdown(
-                    "<style>.stTextArea textarea {border: 2px solid red !important;}</style>",
-                    unsafe_allow_html=True,
-                )
                 return "Automatic Validation using Forward-Backward Failed. Semantic Equivalence Validation using LLM Failed. Human feedback is required."
 
     except Exception as e:
@@ -661,10 +533,9 @@ def validate_translation(src: str, tgt_ui_text: str) -> str:
 
 
 # ----------------------------
-# UI configuration
+# UI Configuration & State
 # ----------------------------
 st.set_page_config(page_title="Braille Translation Demo", page_icon="⠁", layout="wide")
-
 st.markdown(
     """
     <style>
@@ -672,10 +543,9 @@ st.markdown(
         .stElementContainer { margin-bottom: -0.5rem; }
         .streamlit-expander { margin-bottom: 0px !important; }
     </style>
-    """,
+""",
     unsafe_allow_html=True,
 )
-
 st.markdown(
     """
     <div style="text-align:center; margin-top: 0rem">
@@ -684,37 +554,27 @@ st.markdown(
         Incorporating Contextual Awareness and Automated Verification
       </h1>
     </div>
-    """,
+    <hr style="margin-top: 0.5rem; margin-bottom: 1.5rem; border: 0; border-top: 1px solid #f0f2f6;" />
+""",
     unsafe_allow_html=True,
 )
 
-st.markdown(
-    '<hr style="margin-top: 0.5rem; margin-bottom: 1.5rem; border: 0; border-top: 1px solid #f0f2f6;" />',
-    unsafe_allow_html=True,
-)
-
-
-# ----------------------------
-# Session state
-# ----------------------------
 if "mode" not in st.session_state:
     st.session_state.mode = "text_to_braille"
 if "src_text" not in st.session_state:
     st.session_state.src_text = ""
 if "tgt_text" not in st.session_state:
     st.session_state.tgt_text = ""
-
-# UI용 언어 키 초기화 (selectbox용)
+if "summary_text" not in st.session_state:
+    st.session_state.summary_text = ""  # 요약문 저장
 if "src_lang_val" not in st.session_state:
     st.session_state.src_lang_val = "Korean"
 if "tgt_lang_val" not in st.session_state:
     st.session_state.tgt_lang_val = "Braille"
-
-# 스왑 예약 플래그
 if "pending_swap" not in st.session_state:
     st.session_state.pending_swap = False
 
-# --- 스왑 예약 처리 ---
+# Swap Logic
 if st.session_state.pending_swap:
     st.session_state.src_lang_val, st.session_state.tgt_lang_val = (
         st.session_state.tgt_lang_val,
@@ -724,12 +584,11 @@ if st.session_state.pending_swap:
         st.session_state.tgt_text,
         st.session_state.src_text,
     )
+    st.session_state.summary_text = ""  # 스왑하면 요약본 초기화
     st.session_state.pending_swap = False
 
-# 내부 별칭 동기화
 st.session_state.src_lang = st.session_state.src_lang_val
 st.session_state.tgt_lang = st.session_state.tgt_lang_val
-
 TEXT_LANGS = ["Korean", "Braille"]
 
 
@@ -737,7 +596,6 @@ def _enforce_pair_and_mode():
     src = st.session_state.get("src_lang", "Korean")
     tgt = st.session_state.get("tgt_lang", "Braille")
     st.session_state.invalid_pair = not ((src == "Braille") ^ (tgt == "Braille"))
-
     if src == "Braille" and tgt != "Braille":
         st.session_state.mode = "braille_to_text"
     elif tgt == "Braille" and src != "Braille":
@@ -753,7 +611,6 @@ def _update_action_disabled():
     valid_pair = (src_lang == "Braille") ^ (tgt_lang == "Braille")
     llm_lang = src_lang if st.session_state.mode == "text_to_braille" else tgt_lang
     model_ok = pick_model(llm_lang) is not None
-
     st.session_state["action_disabled"] = (not valid_pair) or (not model_ok)
     st.session_state["valid_pair"] = valid_pair
     st.session_state["model_ok"] = model_ok
@@ -761,8 +618,6 @@ def _update_action_disabled():
 
 
 def _on_language_change():
-    st.session_state.src_lang = st.session_state.get("src_lang_val", "Korean")
-    st.session_state.tgt_lang = st.session_state.get("tgt_lang_val", "Braille")
     _update_action_disabled()
 
 
@@ -775,22 +630,25 @@ if "action_disabled" not in st.session_state:
 else:
     _update_action_disabled()
 
+
+def clear_summary_on_change():
+    """원본 텍스트 수정 시 요약 결과 초기화"""
+    st.session_state.summary_text = ""
+
+
 # ----------------------------
-# UI Layout
+# Layout
 # ----------------------------
 mode = st.radio(
     "Mode", ["Translation", "Validation"], horizontal=True, label_visibility="collapsed"
 )
-
 disabled = st.session_state.get("action_disabled", True)
 valid_pair = st.session_state.get("valid_pair", False)
 model_ok = st.session_state.get("model_ok", False)
-llm_lang = st.session_state.get("llm_lang_eval", "")
 is_text_to_braille = st.session_state.mode == "text_to_braille"
 
-# ---- 모드별 버튼 (Separate Buttons for Summarize / Translate) ----
+# Buttons
 if mode == "Translation":
-    # 텍스트 -> 점자 모드일 때만 Summarize 버튼 표시
     if is_text_to_braille:
         col1, col2, col3 = st.columns([8, 1.2, 1])
         with col1:
@@ -809,7 +667,6 @@ if mode == "Translation":
                 "Translate", type="primary", use_container_width=True, disabled=disabled
             )
     else:
-        # 역번역 모드: Summarize 숨김
         col1, col2 = st.columns([9, 1])
         with col1:
             st.markdown(
@@ -819,7 +676,6 @@ if mode == "Translation":
             go_translate = st.button(
                 "Translate", type="primary", use_container_width=True, disabled=disabled
             )
-
 elif mode == "Validation":
     col1, col2 = st.columns([9, 1])
     with col1:
@@ -832,9 +688,8 @@ elif mode == "Validation":
 if not valid_pair:
     st.warning("Exactly one of Source/Target must be Braille.")
 elif not model_ok:
-    st.warning(f"No vLLM model configured for {llm_lang}.")
+    st.warning(f"No vLLM model configured for {st.session_state.llm_lang_eval}.")
 
-# 언어 선택 및 스왑
 header_cols = st.columns([5, 1, 5])
 with header_cols[0]:
     st.selectbox(
@@ -861,60 +716,95 @@ st.session_state.src_text = st.text_area(
     label_visibility="collapsed",
     value=st.session_state.src_text,
     placeholder="Enter the text to be translated here.",
+    on_change=clear_summary_on_change,  # 원본 수정시 요약 초기화
 )
 
 # ----------------------------
-# 실행 로직
+# Logic Execution
 # ----------------------------
 src_nfc = unicodedata.normalize("NFC", st.session_state.src_text)
-result = ""
 
-if mode == "Translation":
-    # 1. 요약 버튼 로직 (입력창 내용을 요약본으로 교체)
-    if "go_summarize" in locals() and go_summarize and src_nfc:
-        summary_res = gemini_summarize(src_nfc, st.session_state.src_lang)
-        # 요약 결과를 session_state에 반영 후 즉시 rerun하여 화면 갱신
-        st.session_state.src_text = summary_res
-        st.rerun()
+# 1. 요약 로직 (독립적)
+if mode == "Translation" and "go_summarize" in locals() and go_summarize and src_nfc:
+    st.session_state.summary_text = gemini_summarize(src_nfc, st.session_state.src_lang)
+    # Rerun to show summary immediately
+    st.rerun()
 
-    # 2. 번역 버튼 로직 (현재 입력창 내용을 번역)
-    if "go_translate" in locals() and go_translate and src_nfc:
-        result = run_translation(src_nfc)
+# 2. 요약 결과 표시 (있을 경우)
+if st.session_state.summary_text:
+    st.markdown("**⬇️ Summarized Text**")
+    st.info(st.session_state.summary_text)
 
-elif mode == "Validation":
-    if (
-        "go_validate_only" in locals()
-        and go_validate_only
-        and src_nfc
-        and st.session_state.tgt_text
-    ):
-        st.session_state["last_val_msg"] = validate_translation(
-            src_nfc, st.session_state.tgt_text
-        )
-
-# 번역 결과 처리
-if result:
-    st.session_state["tgt_text"] = result
-    # 자동 검증 (번역 직후 수행)
-    st.session_state["last_val_msg"] = validate_translation(src_nfc, result)
-
-# Output
+# 3. Output Header
 st.markdown(
     f'<h3 style="margin-top: 0rem; margin-bottom: 0.3rem;">Output ({st.session_state.tgt_lang})</h3>',
     unsafe_allow_html=True,
 )
-st.text_area(
-    "Target Text",
-    height=135,
-    label_visibility="collapsed",
-    key="tgt_text",
-    placeholder="The translation results are displayed here.",
-)
 
-# Validation 메세지 표시
-val_msg = st.session_state.get("last_val_msg", "")
-if val_msg:
-    if "success" in val_msg.lower():
-        st.success(val_msg)
+# 4. 플레이스홀더 설정 (순차적 렌더링을 위해)
+output_placeholder = st.empty()
+validation_placeholder = st.empty()
+
+# 기본 상태 렌더링 (결과가 이미 있으면 표시)
+if st.session_state.tgt_text:
+    output_placeholder.text_area(
+        "Target Text",
+        value=st.session_state.tgt_text,
+        height=135,
+        label_visibility="collapsed",
+    )
+else:
+    output_placeholder.text_area(
+        "Target Text",
+        height=135,
+        label_visibility="collapsed",
+        placeholder="The translation results are displayed here.",
+    )
+
+if "last_val_msg" in st.session_state and st.session_state.last_val_msg:
+    msg = st.session_state.last_val_msg
+    if "success" in msg.lower():
+        validation_placeholder.success(msg)
     else:
-        st.error(val_msg)
+        validation_placeholder.error(msg)
+
+
+# 5. 번역 + 검증 로직 (순차 실행)
+if mode == "Translation" and "go_translate" in locals() and go_translate and src_nfc:
+    # A. 번역 대상 결정 (요약본이 있으면 그것을, 없으면 원본을)
+    real_src = (
+        st.session_state.summary_text if st.session_state.summary_text else src_nfc
+    )
+
+    # B. 번역 실행
+    result = run_translation(real_src)
+    st.session_state.tgt_text = result
+
+    # C. [중요] 번역 결과 즉시 화면에 렌더링 (검증 전에 사용자가 볼 수 있게)
+    output_placeholder.text_area(
+        "Target Text", value=result, height=135, label_visibility="collapsed"
+    )
+
+    # D. 검증 실행
+    val_msg = validate_translation(real_src, result)
+    st.session_state.last_val_msg = val_msg
+
+    # E. 검증 결과 렌더링
+    if "success" in val_msg.lower():
+        validation_placeholder.success(val_msg)
+    else:
+        validation_placeholder.error(val_msg)
+
+elif (
+    mode == "Validation"
+    and "go_validate_only" in locals()
+    and go_validate_only
+    and src_nfc
+    and st.session_state.tgt_text
+):
+    val_msg = validate_translation(src_nfc, st.session_state.tgt_text)
+    st.session_state.last_val_msg = val_msg
+    if "success" in val_msg.lower():
+        validation_placeholder.success(val_msg)
+    else:
+        validation_placeholder.error(val_msg)
